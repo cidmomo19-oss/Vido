@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <title>Videy - Stream Player</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+        body { font-family: 'Poppins', sans-serif; background-color: #fff; }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%; 
+            height: 0;
+            background: #000;
+        }
+        
+        .video-container iframe,
+        .video-container video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <div id="root" class="flex flex-col min-h-screen">
+        <header class="pt-3 pb-3 lg:pt-4 lg:pb-4">
+            <div class="max-w-6xl mx-auto px-6 lg:px-8">
+                <div class="flex items-center justify-between">
+                    <a href="/" class="flex items-center">
+                        <span class="font-semibold text-[26px] tracking-[-2px] text-gray-900">videy</span>
+                    </a>
+                    <a href="/" class="flex items-center space-x-2 px-4 py-1.5 bg-gray-900 text-white font-semibold rounded-full hover:bg-gray-800 transition-colors text-[15px]">
+                        <span>Upload</span>
+                    </a>
+                </div>
+            </div>
+        </header>
+
+        <main class="w-full max-w-[720px] mx-auto flex-grow px-0 md:px-4 md:mt-3">
+            <div class="w-full flex justify-center">
+                <div class="w-full overflow-hidden md:rounded-[8px] shadow-lg">
+                    <div class="video-container" id="player-container">
+                        <div class="flex items-center justify-center h-full text-white text-sm absolute inset-0 bg-black">
+                            Memuat...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="w-full flex flex-col items-center mt-4 mb-12">
+                <button onclick="shareVideo()" class="inline-flex items-center justify-center whitespace-nowrap text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 text-secondary-foreground shadow-sm h-9 py-2 rounded-full px-6 gap-2 bg-gray-100 hover:bg-gray-200 font-semibold">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share w-[18px] h-[18px]">
+                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                        <polyline points="16 6 12 2 8 6"></polyline>
+                        <line x1="12" x2="12" y1="2" y2="15"></line>
+                    </svg>
+                    Share video
+                </button>
+            </div>
+        </main>
+
+        <footer class="pb-6">
+            <div class="max-w-6xl mx-auto px-6 lg:px-8">
+                <div class="flex items-center justify-center space-x-8">
+                    <a href="#" class="text-xs text-gray-400 hover:text-gray-900 transition-colors">Terms of Service</a>
+                    <a href="#" class="text-xs text-gray-400 hover:text-gray-900 transition-colors">Report Abuse</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // Variabel untuk menyimpan Link Asli (karena URL bar bakal kosong)
+        let savedShareUrl = ""; 
+
+        window.onload = function() {
+            const container = document.getElementById('player-container');
+            const params = new URLSearchParams(window.location.search);
+
+            const providers = {
+                'id': (val) => `https://short.icu/${val}`,
+                't': (val) => `https://turbovidhls.com/t/${val}`,
+                's': (val) => `https://rubyvidhub.com/embed-${val}.html`,
+                'm': (val) => `https://mixdrop.ag/e/${val}`,
+                'b': (val) => `https://bysejikuar.com/e/${val}`,
+                'url': (val) => val 
+            };
+
+            let currentVideoData = null;
+
+            // 1. CEK APAKAH ADA PARAMETER BARU DI URL?
+            let foundInUrl = false;
+            for (const [key, func] of Object.entries(providers)) {
+                if (params.has(key)) {
+                    const videoId = params.get(key);
+                    if (videoId) {
+                        // Simpan data
+                        currentVideoData = {
+                            embedUrl: func(videoId),
+                            shareUrl: window.location.href // URL lengkap saat ini (sebelum dihapus)
+                        };
+                        
+                        // Simpan ke Session Storage (biar di-refresh aman)
+                        sessionStorage.setItem('videy_active_session', JSON.stringify(currentVideoData));
+                        foundInUrl = true;
+                        break;
+                    }
+                }
+            }
+
+            // 2. LOGIKA UTAMA
+            if (foundInUrl) {
+                // A. Kalau ada parameter baru:
+                // Hapus parameter URL biar bersih total (jadi domain.com/ saja)
+                window.history.replaceState({}, document.title, window.location.pathname);
+                
+                // Render Player
+                savedShareUrl = currentVideoData.shareUrl;
+                renderPlayer(currentVideoData.embedUrl, container);
+
+            } else {
+                // B. Kalau URL kosong (user refresh atau buka home):
+                // Cek memori browser apakah ada video tersimpan?
+                const storedData = sessionStorage.getItem('videy_active_session');
+                
+                if (storedData) {
+                    const parsed = JSON.parse(storedData);
+                    savedShareUrl = parsed.shareUrl;
+                    renderPlayer(parsed.embedUrl, container);
+                } else {
+                    // C. Benar-benar kosong (Home Page murni)
+                    container.innerHTML = `
+                        <div class='flex flex-col items-center justify-center h-full text-white text-sm absolute inset-0 p-4 text-center'>
+                            <p class="mb-2 font-semibold text-lg">Siap Memutar</p>
+                            <p class="text-gray-400 text-xs">Masukkan parameter URL untuk memulai.</p>
+                        </div>`;
+                }
+            }
+        };
+
+        function renderPlayer(url, container) {
+            const lowerUrl = url.toLowerCase();
+
+            // Cek HLS
+            if (lowerUrl.includes('.m3u8')) {
+                container.innerHTML = '<video id="hls-player" controls playsinline style="width:100%; height:100%;"></video>';
+                const video = document.getElementById('hls-player');
+                if (Hls.isSupported()) {
+                    const hls = new Hls();
+                    hls.loadSource(url);
+                    hls.attachMedia(video);
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = url;
+                }
+            } 
+            // Cek MP4
+            else if (lowerUrl.includes('.mp4')) {
+                container.innerHTML = `<video controls playsinline src="${url}" style="width:100%; height:100%;"></video>`;
+            } 
+            // Sisanya IFRAME (Embed)
+            else {
+                container.innerHTML = `
+                    <iframe 
+                        src="${url}" 
+                        width="100%"
+                        height="100%"
+                        frameborder="0" 
+                        scrolling="no" 
+                        allowfullscreen="true"
+                        referrerpolicy="no-referrer">
+                    </iframe>
+                `;
+            }
+        }
+
+        function shareVideo() {
+            // Kita pakai savedShareUrl karena window.location.href isinya cuma domain utama (kosong)
+            const urlToShare = savedShareUrl || window.location.href;
+
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Nonton Video',
+                    url: urlToShare
+                }).catch(console.error);
+            } else {
+                const dummy = document.createElement('input');
+                document.body.appendChild(dummy);
+                dummy.value = urlToShare;
+                dummy.select();
+                document.execCommand('copy');
+                document.body.removeChild(dummy);
+                alert("Link asli berhasil disalin!");
+            }
+        }
+    </script>
+</body>
+</html>
